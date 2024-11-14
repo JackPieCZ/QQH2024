@@ -112,8 +112,10 @@ class Environment:
 
             # save current bankroll
             self._save_state(date + pd.Timedelta(6, unit="h"), 0.0)
-        
-        print(f"{date} Bankroll: {self.bankroll:.2f}   ", end="\r")
+
+        print(f"{date.date()} Bankroll: {self.bankroll:.2f}   ")
+        if self.bankroll < self.min_bet:
+            raise ValueError("Bankroll is below minimum bet")
 
         return games.drop(["Open", *self.bet_cols], axis=1), players
 

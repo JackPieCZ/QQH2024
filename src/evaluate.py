@@ -4,8 +4,8 @@ import sys
 
 sys.path.append(".")
 
-from model import Model
-from environment import Environment
+from model import Model  # noqa
+from environment import Environment  # noqa
 
 games = pd.read_csv("./data/games.csv", index_col=0)
 games["Date"] = pd.to_datetime(games["Date"])
