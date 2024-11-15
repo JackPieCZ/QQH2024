@@ -1,3 +1,7 @@
+<<<<<<< Updated upstream
+=======
+
+>>>>>>> Stashed changes
 import pandas as pd
 
 def score_team_matches(games_df, team1, team2):
@@ -44,7 +48,11 @@ data = pd.read_csv('./testing/data/games.csv')
 games_df = pd.DataFrame(data)
 
 # Find matches between TeamA and TeamB
+<<<<<<< Updated upstream
 matches = score_team_matches(games_df, 1, 2)
+=======
+matches = get_team_matches(games_df, 1, 2)
+>>>>>>> Stashed changes
 print(matches)
 
 

@@ -1,3 +1,5 @@
+"""Simplest way to decide winner based on thier score in previos matches you can adjust number of last matches (how_many) which is used and
+ threshold when you decide to predict winner"""
 import pandas as pd
 
 def score_team_matches(games_df, team1, team2):
