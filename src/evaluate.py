@@ -4,7 +4,7 @@ import sys
 
 sys.path.append(".")
 
-from model import Model  # noqa
+from model import Model as Model  # noqa
 from environment import Environment  # noqa
 
 games = pd.read_csv("./data/games.csv", index_col=0)

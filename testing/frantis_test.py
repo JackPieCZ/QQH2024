@@ -1,14 +1,3 @@
-import numpy as np
-import pandas as pd
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
-from sklearn.linear_model import LogisticRegression
-from sklearn.feature_selection import RFE
-from sklearn.metrics import roc_auc_score
-from sklearn.ensemble import RandomForestClassifier
-import matplotlib.pyplot as plt
-
-
 import pandas as pd
 
 def get_team_matches(games_df, team1, team2):
@@ -45,13 +34,16 @@ def get_team_matches(games_df, team1, team2):
 
     return result
 
+def compare_score(matches):
+    matches.append(matches[['Date', 'team1_score', 'team2_score']])
+    return score
 # Example usage
 data = pd.read_csv('./testing/data/games.csv')
 
 games_df = pd.DataFrame(data)
 
 # Find matches between TeamA and TeamB
-matches = get_team_matches(games_df, '1', '2')
+matches = get_team_matches(games_df, 1, 2)
 print(matches)
 
 
