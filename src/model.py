@@ -17,12 +17,10 @@ class Model:
         b = odds - 1  # zisk
 
         optimal_fraction = probability - (q / b)
-
+        optimal_fraction = max(0, optimal_fraction)  # nesázet, pokud je Kelly záporný
         optimal_bet = bankroll * optimal_fraction * fraction
 
-        optimal_bet = max(0, optimal_bet)  # nesázet, pokud je Kelly záporný
-
-        return optimal_bet
+        return float(optimal_bet)
 
     def place_bets(self, summary: pd.DataFrame, opps: pd.DataFrame, inc: tuple[pd.DataFrame, pd.DataFrame]):
         #  print(f"{summary=}")
@@ -30,50 +28,35 @@ class Model:
         #  print(f"{inc=}")
         # input("Press Enter to continue...")
         min_bet = summary.iloc[0]["Min_bet"]
-        bankroll = summary.iloc[0]["Bankroll"]
+        max_bet = summary.iloc[0]["Max_bet"]
+        current_bankroll = summary.iloc[0]["Bankroll"]
 
-        kelly_fraction = 1
-        prob_home = 0.6  # zanalyzovat
-        prob_away = 0.4  # zanalyzovat
-
-        # if N > 0:
-
-        #     bets = np.zeros((N, 2))
-
-        #     for _, row in opps.iterrows():
-        #         oddsH = row['OddsH']
-        #         oddsA = row['OddsA']
-
-        #         #  print("index: ", opps.index)
-        #         bet_home = self.kelly_criterion(prob_home, oddsH, bankroll, kelly_fraction)
-        #         bet_away = self.kelly_criterion(prob_away, oddsA, bankroll, kelly_fraction)
-
-        #         bet_home = np.where(bet_home > 0, np.maximum(min_bet, bet_home), 0)
-        #         bet_away = np.where(bet_away > 0, np.maximum(min_bet, bet_away), 0)
-
-        #         bets = pd.DataFrame(data={"BetH": bet_home, "BetA": bet_away}, index=opps.index)
-        #         return bets
-
+        kelly_fraction = 0.5
         bets = []
-        min_bet = summary['Min_bet'].iloc[0]
-        max_bet = summary['Max_bet'].iloc[0]
-        for _, row in opps.iterrows():
+        # only iterate over opps with the current date while keeping the original index
+        date = summary.iloc[0]["Date"]
+        opps = opps[opps["Date"] == date]
+        
+        for opp_idx, row in opps.iterrows():
             # Calculate features for home and away teams based on historical data
-            prob_home = 0.6
-            prob_away = 0.4
             oddsH = row['OddsH']
             oddsA = row['OddsA']
+            prob_home = 0.6
+            prob_away = 0.4
 
             # Calculate Kelly bet sizes
-            bet_home = self.kelly_criterion(prob_home, oddsH, bankroll, kelly_fraction)
-            bet_away = self.kelly_criterion(prob_away, oddsA, bankroll, kelly_fraction)
+            bet_home = self.kelly_criterion(prob_home, oddsH, current_bankroll, kelly_fraction)
+            bet_away = self.kelly_criterion(prob_away, oddsA, current_bankroll, kelly_fraction)
 
             # # Bet sizes should be between min and max bets and be non-negative
-            betH = max(min(bet_home * bankroll, max_bet), min_bet) if bet_home > 0 else 0
-            betA = max(min(bet_away * bankroll, max_bet), min_bet) if bet_away > 0 else 0
+            betH = max(min(bet_home, max_bet), min_bet) if bet_home > min_bet else 0
+            betA = max(min(bet_away, max_bet), min_bet) if bet_away > min_bet else 0
+            # betH = np.where(bet_home > 0, np.maximum(min_bet, bet_home), 0)
+            # betA = np.where(bet_away > 0, np.maximum(min_bet, bet_away), 0)
 
             # Append the bets to the DataFrame
-            bets.append([row.index, betH, betA])
+            bets.append([opp_idx, betH, betA])
+            current_bankroll -= betH + betA
 
         # Convert list of bets to DataFrame and return
         bets_df = pd.DataFrame(bets, columns=['ID', 'BetH', 'BetA'])
