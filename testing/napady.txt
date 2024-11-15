@@ -1,0 +1,3 @@
+- před začátkem playoff vědět leaderboard týmů a sázet na ten lepší (dát mu větší Prob v Kellyho kritériu)
+-udělat vývoj accuracy při zahrnutí X posledních výsledků do predikce
+- prohledaní parametrů které zvýší riziko špatné předpovědi
