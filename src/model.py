@@ -27,17 +27,20 @@ class Model:
         #  print(f"{opps=}")
         #  print(f"{inc=}")
         # input("Press Enter to continue...")
+        games_inc, players_inc = inc
         min_bet = summary.iloc[0]["Min_bet"]
         max_bet = summary.iloc[0]["Max_bet"]
-        current_bankroll = summary.iloc[0]["Bankroll"]
 
         kelly_fraction = 0.5
+        # fraction of budget we are willing to spend today
+        budget_fraction = 0.1
+        todays_budget = summary.iloc[0]["Bankroll"] * budget_fraction
+
         bets = []
         # only iterate over opps with the current date while keeping the original index
-        date = summary.iloc[0]["Date"]
-        opps = opps[opps["Date"] == date]
-        
-        for opp_idx, row in opps.iterrows():
+        todays_date = summary.iloc[0]["Date"]
+
+        for opp_idx, row in opps[opps["Date"] == todays_date].iterrows():
             # Calculate features for home and away teams based on historical data
             oddsH = row['OddsH']
             oddsA = row['OddsA']
@@ -45,8 +48,8 @@ class Model:
             prob_away = 0.4
 
             # Calculate Kelly bet sizes
-            bet_home = self.kelly_criterion(prob_home, oddsH, current_bankroll, kelly_fraction)
-            bet_away = self.kelly_criterion(prob_away, oddsA, current_bankroll, kelly_fraction)
+            bet_home = self.kelly_criterion(prob_home, oddsH, todays_budget, kelly_fraction)
+            bet_away = self.kelly_criterion(prob_away, oddsA, todays_budget, kelly_fraction)
 
             # # Bet sizes should be between min and max bets and be non-negative
             betH = max(min(bet_home, max_bet), min_bet) if bet_home > min_bet else 0
@@ -56,23 +59,11 @@ class Model:
 
             # Append the bets to the DataFrame
             bets.append([opp_idx, betH, betA])
-            current_bankroll -= betH + betA
+            todays_budget -= betH + betA
 
         # Convert list of bets to DataFrame and return
         bets_df = pd.DataFrame(bets, columns=['ID', 'BetH', 'BetA'])
         return bets_df
-
-        """""""""
-        bets = []
-        for idx, row in opps.iterrows():
-            ...
-            # Append the bets to the DataFrame
-            bets.append([row['ID'], betH, betA])
-
-        # Convert list of bets to DataFrame and return
-        bets_df = pd.DataFrame(bets, columns=['ID', 'BetH', 'BetA'])
-        
-        """
 
 
 """
