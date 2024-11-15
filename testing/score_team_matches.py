@@ -37,6 +37,25 @@ def score_team_matches(games_df, team1, team2):
     result = result.assign(score_ratio=result['team1_score'] / result['team2_score'])
     return result
 
+def calculate_winner_score_ratio(matches, how_many=None):
+    # Sort by date and filter the last `how_many` matches
+    matches = matches.sort_values(by='Date', ascending=False)
+    if how_many:
+        matches = matches.head(how_many)
+
+    # Calculate cumulative score ratio (average)
+    cumulative_score_ratio = matches['score_ratio'].mean()
+
+    # Predict the winner based on cumulative score ratio
+    threshold = 0.1
+    if cumulative_score_ratio > (1 + threshold):
+        predicted_winner = 1  # Team 1 wins
+    elif cumulative_score_ratio < (1 - threshold):
+        predicted_winner = 2  # Team 2 wins
+    else:
+        predicted_winner = 0  # No clear winner (close game)
+
+    return predicted_winner
 
 # Example usage
 data = pd.read_csv('./testing/data/games.csv')
@@ -46,5 +65,5 @@ games_df = pd.DataFrame(data)
 # Find matches between TeamA and TeamB
 matches = score_team_matches(games_df, 1, 2)
 print(matches)
-
+print("winner:", calculate_winner_score_ratio(matches, 20))
 
