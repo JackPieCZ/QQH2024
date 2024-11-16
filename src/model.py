@@ -2,13 +2,17 @@ import numpy as np
 import pandas as pd
 
 from arbitrage import calculate_arbitrage_betting
-from strats.win_prob_lenka import *
-from strats.win_prob_frantisek import *
-from strats.win_prob_sviga import *
-from strats.win_prob_kuba import *
+from database import HistoricalDatabase
+from strats.win_prob_lenka import calculate_win_probs_lenka, calculate_win_probs_lenka2
+from strats.win_prob_frantisek import calculate_win_probs_frantisek, calculate_win_probs_frantisek2
+from strats.win_prob_sviga import calculate_win_probs_sviga, calculate_win_probs_sviga2
+from strats.win_prob_kuba import calculate_win_probs_kuba, calculate_win_probs_kuba2
 
 
 class Model:
+    def __init__(self):
+        self.db = HistoricalDatabase()
+
     def kelly_criterion(self, probability, odds, bankroll, fraction):
         """
         Vypočítá optimální výši sázky pomocí Kellyho kritéria.
@@ -31,6 +35,7 @@ class Model:
 
     def place_bets(self, summary: pd.DataFrame, opps: pd.DataFrame, inc: tuple[pd.DataFrame, pd.DataFrame]):
         games_inc, players_inc = inc
+        self.db.add_incremental_data(games_inc, players_inc)
         # print(f"{summary=}")
         # print(f"{opps=}")
         # print(f"{games_inc=}")
@@ -51,7 +56,8 @@ class Model:
         todays_opps = opps[opps["Date"] == todays_date]
 
         # Add columns for new bet sizes and win probabilities
-        pd.options.mode.chained_assignment = None  # Temporarily disable SettingWithCopyWarning
+        # Temporarily disable SettingWithCopyWarning
+        pd.options.mode.chained_assignment = None
         todays_opps['newBetH'] = 0.0
         todays_opps['newBetA'] = 0.0
         todays_opps['ProbH'] = 0.0
@@ -67,9 +73,10 @@ class Model:
             assert betH == 0 and betA == 0, "Both bets should be zero at the beginning"
 
             prob_home, prob_away = calculate_win_probs_fn(
-                summary, opp, games_inc, players_inc)
+                summary, opp, games_inc, players_inc, self.db)
             assert 0 <= prob_home <= 1 and 0 <= prob_away <= 1, "Probabilities should be between 0 and 1"
-            assert abs(prob_home - prob_away) < 1e-9, "Probabilities should sum up to 1"
+            assert abs(
+                prob_home - prob_away) < 1e-9, "Probabilities should sum up to 1"
             todays_opps.loc[todays_opps.index == opp_idx, 'ProbH'] = prob_home
             todays_opps.loc[todays_opps.index == opp_idx, 'ProbA'] = prob_away
 
@@ -86,10 +93,11 @@ class Model:
 
             oddsH = opp['OddsH']
             oddsA = opp['OddsA']
-            
+
             # Check if there is an arbitrage betting opportunity
             if calculate_arbitrage_betting(oddsH, oddsA):
-                print(f"Arbitrage opportunity detected for opp {opp_idx}, nice!")
+                print(f"Arbitrage opportunity detected for opp {
+                      opp_idx}, nice!")
                 # Take advantage of the arbitrage
                 bet_home = todays_budget / 2
                 bet_away = todays_budget / 2
@@ -117,9 +125,10 @@ class Model:
             # Stop if we run out of budget
             if todays_budget <= 0:
                 break
-        
+
         bets = todays_opps[['newBetH', 'newBetA']]
-        bets.rename(columns={'newBetH': 'BetH', 'newBetA': 'BetA'}, inplace=True)
+        bets.rename(columns={'newBetH': 'BetH',
+                    'newBetA': 'BetA'}, inplace=True)
         return bets
 
 
