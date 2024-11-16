@@ -64,7 +64,7 @@ class Model:
         todays_opps['ProbA'] = 0.0
 
         # upravte si čí funkci vyhodnocování pravděpodobností výhry chcete použít
-        calculate_win_probs_fn = calculate_win_probs_lenka
+        calculate_win_probs_fn = calculate_win_probs_kuba
 
         # Calculate win probabilities for each opportunity
         for opp_idx, opp in todays_opps.iterrows():
@@ -75,8 +75,7 @@ class Model:
             prob_home, prob_away = calculate_win_probs_fn(
                 summary, opp, games_inc, players_inc, self.db)
             assert 0 <= prob_home <= 1 and 0 <= prob_away <= 1, "Probabilities should be between 0 and 1"
-            assert abs(
-                prob_home - prob_away) < 1e-9, "Probabilities should sum up to 1"
+            assert abs(1 - (prob_home + prob_away)) < 1e-9, "Probabilities should sum up to 1"
             todays_opps.loc[todays_opps.index == opp_idx, 'ProbH'] = prob_home
             todays_opps.loc[todays_opps.index == opp_idx, 'ProbA'] = prob_away
 
