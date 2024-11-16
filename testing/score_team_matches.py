@@ -2,6 +2,7 @@
  threshold when you decide to predict winner"""
 import pandas as pd
 
+
 def score_team_matches(games_df, team1, team2):
     """
     Get the dates and scores of matches between two teams in specified order.
@@ -32,12 +33,15 @@ def score_team_matches(games_df, team1, team2):
     )
 
     # Select and sort the relevant columns
-    result = matches[['Date', 'team1_score', 'team2_score']].sort_values(by='Date').reset_index(drop=True)
-    
-    #compare_score
+    result = matches[['Date', 'team1_score', 'team2_score']
+                     ].sort_values(by='Date').reset_index(drop=True)
+
+    # compare_score
     """Adds column: team1_score/team2_score"""
-    result = result.assign(score_ratio=result['team1_score'] / result['team2_score'])
+    result = result.assign(
+        score_ratio=result['team1_score'] / result['team2_score'])
     return result
+
 
 def calculate_winner_score_ratio(matches, how_many=None):
     # Sort by date and filter the last `how_many` matches
@@ -59,8 +63,9 @@ def calculate_winner_score_ratio(matches, how_many=None):
 
     return predicted_winner
 
+
 # Example usage
-data = pd.read_csv('./testing/data/games.csv')
+data = pd.read_csv('./data/games.csv')
 
 games_df = pd.DataFrame(data)
 
@@ -68,4 +73,3 @@ games_df = pd.DataFrame(data)
 matches = score_team_matches(games_df, 1, 2)
 print(matches)
 print("winner:", calculate_winner_score_ratio(matches, 20))
-

@@ -1,6 +1,12 @@
 import numpy as np
 import pandas as pd
 
+from arbitrage import calculate_arbitrage_betting
+from strats.win_prob_lenka import *
+from strats.win_prob_frantisek import *
+from strats.win_prob_sviga import *
+from strats.win_prob_kuba import *
+
 
 class Model:
     def kelly_criterion(self, probability, odds, bankroll, fraction):
@@ -17,17 +23,19 @@ class Model:
         b = odds - 1  # zisk
 
         optimal_fraction = probability - (q / b)
-        optimal_fraction = max(0, optimal_fraction)  # nesázet, pokud je Kelly záporný
+        # nesázet, pokud je Kelly záporný
+        optimal_fraction = max(0, optimal_fraction)
         optimal_bet = bankroll * optimal_fraction * fraction
 
         return float(optimal_bet)
 
     def place_bets(self, summary: pd.DataFrame, opps: pd.DataFrame, inc: tuple[pd.DataFrame, pd.DataFrame]):
-        #  print(f"{summary=}")
-        #  print(f"{opps=}")
-        #  print(f"{inc=}")
-        # input("Press Enter to continue...")
         games_inc, players_inc = inc
+        # print(f"{summary=}")
+        # print(f"{opps=}")
+        # print(f"{games_inc=}")
+        # print(f"{players_inc=}")
+        # input("Press Enter to continue...")
         min_bet = summary.iloc[0]["Min_bet"]
         max_bet = summary.iloc[0]["Max_bet"]
 
@@ -36,34 +44,83 @@ class Model:
         budget_fraction = 0.1
         todays_budget = summary.iloc[0]["Bankroll"] * budget_fraction
 
-        bets = []
         # only iterate over opps with the current date while keeping the original index
         todays_date = summary.iloc[0]["Date"]
+        assert opps[opps["Date"] < todays_date].empty, \
+            "There are opps before today's date, which should never happen"
+        todays_opps = opps[opps["Date"] == todays_date]
 
-        for opp_idx, row in opps[opps["Date"] == todays_date].iterrows():
-            # Calculate features for home and away teams based on historical data
-            oddsH = row['OddsH']
-            oddsA = row['OddsA']
-            prob_home = 0.6
-            prob_away = 0.4
+        # Add columns for new bet sizes and win probabilities
+        pd.options.mode.chained_assignment = None  # Temporarily disable SettingWithCopyWarning
+        todays_opps['newBetH'] = 0.0
+        todays_opps['newBetA'] = 0.0
+        todays_opps['ProbH'] = 0.0
+        todays_opps['ProbA'] = 0.0
 
-            # Calculate Kelly bet sizes
-            bet_home = self.kelly_criterion(prob_home, oddsH, todays_budget, kelly_fraction)
-            bet_away = self.kelly_criterion(prob_away, oddsA, todays_budget, kelly_fraction)
+        # upravte si čí funkci vyhodnocování pravděpodobností výhry chcete použít
+        calculate_win_probs_fn = calculate_win_probs_lenka
 
-            # # Bet sizes should be between min and max bets and be non-negative
-            betH = max(min(bet_home, max_bet), min_bet) if bet_home > min_bet else 0
-            betA = max(min(bet_away, max_bet), min_bet) if bet_away > min_bet else 0
-            # betH = np.where(bet_home > 0, np.maximum(min_bet, bet_home), 0)
-            # betA = np.where(bet_away > 0, np.maximum(min_bet, bet_away), 0)
+        # Calculate win probabilities for each opportunity
+        for opp_idx, opp in todays_opps.iterrows():
+            betH = opp['BetH']
+            betA = opp['BetA']
+            assert betH == 0 and betA == 0, "Both bets should be zero at the beginning"
 
-            # Append the bets to the DataFrame
-            bets.append([opp_idx, betH, betA])
+            prob_home, prob_away = calculate_win_probs_fn(
+                summary, opp, games_inc, players_inc)
+            assert 0 <= prob_home <= 1 and 0 <= prob_away <= 1, "Probabilities should be between 0 and 1"
+            assert abs(prob_home - prob_away) < 1e-9, "Probabilities should sum up to 1"
+            todays_opps.loc[todays_opps.index == opp_idx, 'ProbH'] = prob_home
+            todays_opps.loc[todays_opps.index == opp_idx, 'ProbA'] = prob_away
+
+        # Sort win probabilities in descending order and keep track of original indices
+        sorted_win_probs_opps = todays_opps.sort_values(
+            by=['ProbH', 'ProbA'], ascending=False).reset_index()
+
+        # Place bets based on Kelly criterion starting with the highest win probabilities first
+        for _, row in sorted_win_probs_opps.iterrows():
+            opp_idx = row['index']
+            prob_home = row['ProbH']
+            prob_away = row['ProbA']
+            opp = todays_opps.loc[opp_idx]
+
+            oddsH = opp['OddsH']
+            oddsA = opp['OddsA']
+            
+            # Check if there is an arbitrage betting opportunity
+            if calculate_arbitrage_betting(oddsH, oddsA):
+                print(f"Arbitrage opportunity detected for opp {opp_idx}, nice!")
+                # Take advantage of the arbitrage
+                bet_home = todays_budget / 2
+                bet_away = todays_budget / 2
+            else:
+                # Calculate Kelly bet sizes
+                bet_home = self.kelly_criterion(
+                    prob_home, oddsH, todays_budget, kelly_fraction)
+                bet_away = self.kelly_criterion(
+                    prob_away, oddsA, todays_budget, kelly_fraction)
+
+                assert bet_home == 0 or bet_away == 0, \
+                    "Only one bet should be placed, if there is no opportunity to arbitrage"
+
+            # Bet sizes should be between min and max bets and be non-negative
+            betH = max(min(bet_home, max_bet),
+                       min_bet) if bet_home > min_bet else 0
+            betA = max(min(bet_away, max_bet),
+                       min_bet) if bet_away > min_bet else 0
+
+            # Update the bets DataFrame with calculated bet sizes
+            todays_opps.loc[todays_opps.index == opp_idx, 'newBetH'] = betH
+            todays_opps.loc[todays_opps.index == opp_idx, 'newBetA'] = betA
             todays_budget -= betH + betA
 
-        # Convert list of bets to DataFrame and return
-        bets_df = pd.DataFrame(bets, columns=['ID', 'BetH', 'BetA'])
-        return bets_df
+            # Stop if we run out of budget
+            if todays_budget <= 0:
+                break
+        
+        bets = todays_opps[['newBetH', 'newBetA']]
+        bets.rename(columns={'newBetH': 'BetH', 'newBetA': 'BetA'}, inplace=True)
+        return bets
 
 
 """
