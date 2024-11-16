@@ -72,16 +72,17 @@ class Model:
             betA = opp['BetA']
             assert betH == 0 and betA == 0, "Both bets should be zero at the beginning"
 
-            prob_home, prob_away = calculate_win_probs_fn(
-                summary, opp, games_inc, players_inc, self.db)
+            prob_home, prob_away = calculate_win_probs_fn(summary, opp, games_inc, players_inc, self.db)
             assert 0 <= prob_home <= 1 and 0 <= prob_away <= 1, "Probabilities should be between 0 and 1"
             assert abs(1 - (prob_home + prob_away)) < 1e-9, "Probabilities should sum up to 1"
+            
             todays_opps.loc[todays_opps.index == opp_idx, 'ProbH'] = prob_home
             todays_opps.loc[todays_opps.index == opp_idx, 'ProbA'] = prob_away
 
         # Sort win probabilities in descending order and keep track of original indices
-        sorted_win_probs_opps = todays_opps.sort_values(
-            by=['ProbH', 'ProbA'], ascending=False).reset_index()
+        # Create a new column with the maximum probability between home and away
+        todays_opps['MaxProb'] = todays_opps[['ProbH', 'ProbA']].max(axis=1)
+        sorted_win_probs_opps = todays_opps.sort_values(by='MaxProb', ascending=False).reset_index()
 
         # Place bets based on Kelly criterion starting with the highest win probabilities first
         for _, row in sorted_win_probs_opps.iterrows():
@@ -95,26 +96,21 @@ class Model:
 
             # Check if there is an arbitrage betting opportunity
             if calculate_arbitrage_betting(oddsH, oddsA):
-                print(f"Arbitrage opportunity detected for opp {
-                      opp_idx}, nice!")
+                print(f"Arbitrage opportunity detected for opp {opp_idx}, nice!")
                 # Take advantage of the arbitrage
                 bet_home = todays_budget / 2
                 bet_away = todays_budget / 2
             else:
                 # Calculate Kelly bet sizes
-                bet_home = self.kelly_criterion(
-                    prob_home, oddsH, todays_budget, kelly_fraction)
-                bet_away = self.kelly_criterion(
-                    prob_away, oddsA, todays_budget, kelly_fraction)
+                bet_home = self.kelly_criterion(prob_home, oddsH, todays_budget, kelly_fraction)
+                bet_away = self.kelly_criterion(prob_away, oddsA, todays_budget, kelly_fraction)
 
                 assert bet_home == 0 or bet_away == 0, \
                     "Only one bet should be placed, if there is no opportunity to arbitrage"
 
             # Bet sizes should be between min and max bets and be non-negative
-            betH = max(min(bet_home, max_bet),
-                       min_bet) if bet_home > min_bet else 0
-            betA = max(min(bet_away, max_bet),
-                       min_bet) if bet_away > min_bet else 0
+            betH = max(min(bet_home, max_bet),min_bet) if bet_home > min_bet else 0
+            betA = max(min(bet_away, max_bet),min_bet) if bet_away > min_bet else 0
 
             # Update the bets DataFrame with calculated bet sizes
             todays_opps.loc[todays_opps.index == opp_idx, 'newBetH'] = betH
@@ -126,8 +122,7 @@ class Model:
                 break
 
         bets = todays_opps[['newBetH', 'newBetA']]
-        bets.rename(columns={'newBetH': 'BetH',
-                    'newBetA': 'BetA'}, inplace=True)
+        bets.rename(columns={'newBetH': 'BetH','newBetA': 'BetA'}, inplace=True)
         return bets
 
 
