@@ -41,6 +41,7 @@ class Model:
         kelly_fraction = 0.2
         # fraction of budget we are willing to spend today
         budget_fraction = 0.2
+        use_kelly = True
         
         min_bet = summary.iloc[0]["Min_bet"]
         max_bet = summary.iloc[0]["Max_bet"]
@@ -142,44 +143,64 @@ class Model:
             opps.loc[opps.index == opp_idx, "KellyH"] = kellyH
             opps.loc[opps.index == opp_idx, "KellyA"] = kellyA
 
-        # Sort Kelly criterion in descending order and keep track of original indices
-        # Create a new column with the maximum kelly of home and away
-        opps["MaxKelly"] = opps[["KellyH", "KellyA"]].max(axis=1)
-        sorted_win_probs_opps = opps.sort_values(by="MaxKelly", ascending=False)
+        if use_kelly:
+            # Sort Kelly criterion in descending order and keep track of original indices
+            # Create a new column with the maximum kelly of home and away
+            opps["MaxKelly"] = opps[["KellyH", "KellyA"]].max(axis=1)
+            sorted_win_probs_opps = opps.sort_values(by="MaxKelly", ascending=False)
 
-        # Place bets based on Kelly criterion starting with the highest one
-        for opp_idx, row in sorted_win_probs_opps.iterrows():
-            # opp_idx = row["index"]
-            kellyH = row["KellyH"]
-            kellyA = row["KellyA"]
-            probH = row["ProbH"]
-            probA = row["ProbA"]
-            
-            # # New logic: Only bet on the outcome with the higher probability
-            # if probH >= probA:
-            #     kellyA = 0  # Set the Kelly fraction for away team to zero if home is predicted higher
-            # else:
-            #     kellyH = 0  # Set the Kelly fraction for home team to zero if away is predicted higher
+            # Place bets based on Kelly criterion starting with the highest one
+            for opp_idx, row in sorted_win_probs_opps.iterrows():
+                # opp_idx = row["index"]
+                kellyH = row["KellyH"]
+                kellyA = row["KellyA"]
+                probH = row["ProbH"]
+                probA = row["ProbA"]
+                
+                # # New logic: Only bet on the outcome with the higher probability
+                # if probH >= probA:
+                #     kellyA = 0  # Set the Kelly fraction for away team to zero if home is predicted higher
+                # else:
+                #     kellyH = 0  # Set the Kelly fraction for home team to zero if away is predicted higher
 
-            # Skip if both Kelly fractions are zero
-            if kellyH == 0 and kellyA == 0:
-                continue
+                # Skip if both Kelly fractions are zero
+                if kellyH == 0 and kellyA == 0:
+                    continue
 
-            bet_home = kellyH * todays_budget * kelly_fraction
-            bet_away = kellyA * todays_budget * kelly_fraction
+                bet_home = kellyH * todays_budget * kelly_fraction
+                bet_away = kellyA * todays_budget * kelly_fraction
+                
+                # Bet sizes should be between min and max bets and be non-negative
+                betH = max(min(bet_home, max_bet), min_bet) if bet_home > min_bet else 0
+                betA = max(min(bet_away, max_bet), min_bet) if bet_away > min_bet else 0
 
-            # Bet sizes should be between min and max bets and be non-negative
-            betH = max(min(bet_home, max_bet), min_bet) if bet_home > min_bet else 0
-            betA = max(min(bet_away, max_bet), min_bet) if bet_away > min_bet else 0
+                # Update the bets DataFrame with calculated bet sizes
+                opps.loc[opps.index == opp_idx, "newBetH"] = betH
+                opps.loc[opps.index == opp_idx, "newBetA"] = betA
+                todays_budget -= betH + betA
 
-            # Update the bets DataFrame with calculated bet sizes
-            opps.loc[opps.index == opp_idx, "newBetH"] = betH
-            opps.loc[opps.index == opp_idx, "newBetA"] = betA
-            todays_budget -= betH + betA
+                # Stop if we run out of budget
+                if todays_budget <= 0:
+                    break
+        else:
+            # Bet on a team we predicted to win
+            for opp_idx, row in todays_opps.iterrows():
+                probH = row["ProbH"]
+                probA = row["ProbA"]
+                
+                betH = min_bet if probH >= probA else 0
+                betA = min_bet if probA > probH else 0
+                
+                betH = max(min(betH, max_bet), min_bet) if betH > min_bet else 0
+                betA = max(min(betA, max_bet), min_bet) if betA > min_bet else 0
+                
+                opps.loc[opps.index == opp_idx, "newBetH"] = betH
+                opps.loc[opps.index == opp_idx, "newBetA"] = betA
+                todays_budget -= betH + betA
+                
+                if todays_budget <= 0:
+                    break
 
-            # Stop if we run out of budget
-            if todays_budget <= 0:
-                break
         self.money_spent_yesterday = bankroll * budget_fraction - todays_budget
         bets = opps[["newBetH", "newBetA"]]
         bets.rename(columns={"newBetH": "BetH", "newBetA": "BetA"}, inplace=True)
