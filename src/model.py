@@ -40,8 +40,8 @@ class Model:
         calculate_win_probs_fn = calculate_win_probs_kuba
         kelly_fraction = 0.2
         # fraction of budget we are willing to spend today
-        budget_fraction = 0.2
-        use_kelly = True
+        budget_fraction = 0.1
+        use_kelly = False
         
         min_bet = summary.iloc[0]["Min_bet"]
         max_bet = summary.iloc[0]["Max_bet"]
@@ -171,8 +171,8 @@ class Model:
                 bet_away = kellyA * todays_budget * kelly_fraction
                 
                 # Bet sizes should be between min and max bets and be non-negative
-                betH = max(min(bet_home, max_bet), min_bet) if bet_home > min_bet else 0
-                betA = max(min(bet_away, max_bet), min_bet) if bet_away > min_bet else 0
+                betH = max(min(bet_home, max_bet), min_bet) if bet_home >= min_bet else 0
+                betA = max(min(bet_away, max_bet), min_bet) if bet_away >= min_bet else 0
 
                 # Update the bets DataFrame with calculated bet sizes
                 opps.loc[opps.index == opp_idx, "newBetH"] = betH
@@ -184,15 +184,17 @@ class Model:
                     break
         else:
             # Bet on a team we predicted to win
-            for opp_idx, row in todays_opps.iterrows():
+            for opp_idx, row in opps.iterrows():
                 probH = row["ProbH"]
                 probA = row["ProbA"]
+                if probH == 0 and probA == 0:
+                    continue
                 
                 betH = min_bet if probH >= probA else 0
                 betA = min_bet if probA > probH else 0
                 
-                betH = max(min(betH, max_bet), min_bet) if betH > min_bet else 0
-                betA = max(min(betA, max_bet), min_bet) if betA > min_bet else 0
+                betH = max(min(betH, max_bet), min_bet) if betH >= min_bet else 0
+                betA = max(min(betA, max_bet), min_bet) if betA >= min_bet else 0
                 
                 opps.loc[opps.index == opp_idx, "newBetH"] = betH
                 opps.loc[opps.index == opp_idx, "newBetA"] = betA
