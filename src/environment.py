@@ -21,7 +21,7 @@ class Environment:
 
     # fmt: off
     feature_cols = [
-        "HFGM", "AFGM", "HFGA", "AFGA", "HFG3M", "AFG3M", "HFG3A", "AFG3A", 
+        "HFGM", "AFGM", "HFGA", "AFGA", "HFG3M", "AFG3M", "HFG3A", "AFG3A",
         "HFTM", "AFTM", "HFTA", "AFTA", "HORB", "AORB", "HDRB", "ADRB", "HRB", "ARB", "HAST",
         "AAST", "HSTL", "ASTL", "HBLK", "ABLK", "HTOV", "ATOV", "HPF", "APF",
     ]
@@ -43,12 +43,8 @@ class Environment:
         self.players = players
         self.games[self.bet_cols] = 0.0
 
-        self.start_date: pd.Timestamp = (
-            start_date if start_date is not None else self.games["Open"].min()
-        )
-        self.end_date: pd.Timestamp = (
-            end_date if end_date is not None else self.games["Date"].max()
-        )
+        self.start_date: pd.Timestamp = start_date if start_date is not None else self.games["Open"].min()
+        self.end_date: pd.Timestamp = end_date if end_date is not None else self.games["Date"].max()
 
         self.model = model
 
@@ -92,12 +88,8 @@ class Environment:
         return history
 
     def _next_date(self, date: pd.Timestamp):
-        games = self.games.loc[
-            (self.games["Date"] > self.last_seen) & (self.games["Date"] < date)
-        ]
-        players = self.players.loc[
-            (self.players["Date"] > self.last_seen) & (self.players["Date"] < date)
-        ]
+        games = self.games.loc[(self.games["Date"] > self.last_seen) & (self.games["Date"] < date)]
+        players = self.players.loc[(self.players["Date"] > self.last_seen) & (self.players["Date"] < date)]
         self.last_seen = games["Date"].max() if not games.empty else self.last_seen
 
         if not games.empty:
@@ -120,9 +112,7 @@ class Environment:
         return games.drop(["Open", *self.bet_cols], axis=1), players
 
     def _get_options(self, date: pd.Timestamp):
-        opps = self.games.loc[
-            (self.games["Open"] <= date) & (self.games["Date"] >= date)
-        ]
+        opps = self.games.loc[(self.games["Open"] <= date) & (self.games["Date"] >= date)]
         opps = opps.loc[opps[self.odds_cols].sum(axis=1) > 0]
         return opps.drop(
             [*self.score_cols, *self.result_cols, *self.feature_cols, "Open"],
@@ -151,9 +141,7 @@ class Environment:
 
     def _place_bets(self, date: pd.Timestamp, bets: pd.DataFrame):
         # print("Placing bets")
-        self.games.loc[bets.index, self.bet_cols] = self.games.loc[
-            bets.index, self.bet_cols
-        ].add(bets, fill_value=0)
+        self.games.loc[bets.index, self.bet_cols] = self.games.loc[bets.index, self.bet_cols].add(bets, fill_value=0)
 
         # Decrease the bankroll with placed bets
         self.bankroll -= bets.values.sum()
