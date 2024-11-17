@@ -36,21 +36,25 @@ class Model:
         return float(optimal_fraction)
 
     def place_bets(self, summary: pd.DataFrame, opps: pd.DataFrame, inc: tuple[pd.DataFrame, pd.DataFrame]):
+        min_bet = summary.iloc[0]["Min_bet"]
+        max_bet = summary.iloc[0]["Max_bet"]
+        bankroll = summary.iloc[0]["Bankroll"]
+        todays_date = summary.iloc[0]["Date"]
+        # only iterate over opps with the current date while keeping the original index
+        assert opps[opps["Date"] < todays_date].empty, "There are opps before today's date, which should never happen"
+        todays_opps = opps[opps["Date"] == todays_date]
+        games_inc, players_inc = inc
+        self.yesterdays_games = games_inc
+
         # upravte si čí funkci vyhodnocování pravděpodobností výhry chcete použít
         calculate_win_probs_fn = calculate_win_probs_kuba
         kelly_fraction = 0.2
         # fraction of budget we are willing to spend today
         budget_fraction = 0.1
         use_kelly = False
-        
-        min_bet = summary.iloc[0]["Min_bet"]
-        max_bet = summary.iloc[0]["Max_bet"]
-        bankroll = summary.iloc[0]["Bankroll"]
-        todays_date = summary.iloc[0]["Date"]
+        todays_budget = bankroll * budget_fraction
+        non_kelly_bet_amount = min_bet * 2
 
-        games_inc, players_inc = inc
-        self.yesterdays_games = games_inc
-        
         # Evaluate yesterday's predictions
         if self.yesterdays_bets is not None:
             # Calculate accuracy of yesterday's predictions
@@ -70,12 +74,12 @@ class Model:
                 # Determine which team was predicted to win
                 assert prediction["ProbH"] + prediction["ProbA"] != 0, "Probabilities should not sum up to zero"
                 predicted_home_win = prediction["ProbH"] > prediction["ProbA"]
-                
+
                 if prediction["newBetH"] + prediction["newBetA"] != 0:
                     betted_home_win = prediction["newBetH"] > prediction["newBetA"]
                     if (betted_home_win and game["H"] == 1) or (not betted_home_win and game["A"] == 1):
                         correct_bets += 1
-                
+
                 bookmaker_predicted_home_win = game["OddsH"] < game["OddsA"]
                 if (bookmaker_predicted_home_win and game["H"] == 1) or (not bookmaker_predicted_home_win and game["A"] == 1):
                     correct_bookmaker_bets += 1
@@ -90,15 +94,9 @@ class Model:
             print(f"Yesterday's betting accuracy: {bets_accuracy} ({correct_bets}/{num_bets})")
             print(f"Yesterday's bookmaker's accuracy: {bookmaker_accuracy} ({correct_bookmaker_bets}/{total_predictions})")
             print(f"Money - spent: {self.money_spent_yesterday:.2f}$, gained: {bankroll - self.bankroll_after_bets:.2f}$")
-            input("Press Enter to continue...")
+            # input("Press Enter to continue...")
 
         self.db.add_incremental_data(games_inc, players_inc)
-
-        todays_budget = bankroll * budget_fraction
-
-        # only iterate over opps with the current date while keeping the original index
-        assert opps[opps["Date"] < todays_date].empty, "There are opps before today's date, which should never happen"
-        todays_opps = opps[opps["Date"] == todays_date]
 
         # Temporarily disable SettingWithCopyWarning
         pd.options.mode.chained_assignment = None
@@ -156,7 +154,7 @@ class Model:
                 kellyA = row["KellyA"]
                 probH = row["ProbH"]
                 probA = row["ProbA"]
-                
+
                 # # New logic: Only bet on the outcome with the higher probability
                 # if probH >= probA:
                 #     kellyA = 0  # Set the Kelly fraction for away team to zero if home is predicted higher
@@ -169,7 +167,7 @@ class Model:
 
                 bet_home = kellyH * todays_budget * kelly_fraction
                 bet_away = kellyA * todays_budget * kelly_fraction
-                
+
                 # Bet sizes should be between min and max bets and be non-negative
                 betH = max(min(bet_home, max_bet), min_bet) if bet_home >= min_bet else 0
                 betA = max(min(bet_away, max_bet), min_bet) if bet_away >= min_bet else 0
@@ -189,17 +187,17 @@ class Model:
                 probA = row["ProbA"]
                 if probH == 0 and probA == 0:
                     continue
-                
-                betH = min_bet if probH >= probA else 0
-                betA = min_bet if probA > probH else 0
-                
+
+                betH = non_kelly_bet_amount if probH >= probA else 0
+                betA = non_kelly_bet_amount if probA > probH else 0
+
                 betH = max(min(betH, max_bet), min_bet) if betH >= min_bet else 0
                 betA = max(min(betA, max_bet), min_bet) if betA >= min_bet else 0
-                
+
                 opps.loc[opps.index == opp_idx, "newBetH"] = betH
                 opps.loc[opps.index == opp_idx, "newBetA"] = betA
                 todays_budget -= betH + betA
-                
+
                 if todays_budget <= 0:
                     break
 
