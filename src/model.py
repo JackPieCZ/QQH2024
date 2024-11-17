@@ -36,6 +36,9 @@ class Model:
         return float(optimal_fraction)
 
     def place_bets(self, summary: pd.DataFrame, opps: pd.DataFrame, inc: tuple[pd.DataFrame, pd.DataFrame]):
+        games_inc, players_inc = inc
+        if opps.empty and games_inc.empty and players_inc.empty:
+            return pd.DataFrame(columns=["BetH", "BetA"])
         min_bet = summary.iloc[0]["Min_bet"]
         max_bet = summary.iloc[0]["Max_bet"]
         bankroll = summary.iloc[0]["Bankroll"]
@@ -43,7 +46,6 @@ class Model:
         # only iterate over opps with the current date while keeping the original index
         assert opps[opps["Date"] < todays_date].empty, "There are opps before today's date, which should never happen"
         todays_opps = opps[opps["Date"] == todays_date]
-        games_inc, players_inc = inc
         self.yesterdays_games = games_inc
 
         # upravte si čí funkci vyhodnocování pravděpodobností výhry chcete použít
@@ -68,8 +70,8 @@ class Model:
                 # Get corresponding prediction
                 prediction = self.yesterdays_bets.loc[idx]
                 # Export prediction with index to CSV
-                prediction_df = pd.DataFrame(prediction).T
-                game_df = pd.DataFrame(game).T
+                # prediction_df = pd.DataFrame(prediction).T
+                # game_df = pd.DataFrame(game).T
 
                 # Determine which team was predicted to win
                 assert prediction["ProbH"] + prediction["ProbA"] != 0, "Probabilities should not sum up to zero"
