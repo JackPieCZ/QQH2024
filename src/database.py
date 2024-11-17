@@ -5,37 +5,17 @@ from typing import Dict, List, Tuple
 
 class HistoricalDatabase:
     def __init__(self):
+        # fmt: off
         self.team_columns = [
-            "GameID",
-            "Season",
-            "Date",
-            "TeamID",
-            "OpponentID",
-            "N",
-            "POFF",
-            "TeamOdds",
-            "OpponentOdds",
-            "W",
-            "Home",
-            "SC",
-            "FGM",
-            "FGA",
-            "FG3M",
-            "FG3A",
-            "FTM",
-            "FTA",
-            "ORB",
-            "DRB",
-            "RB",
-            "AST",
-            "STL",
-            "BLK",
-            "TOV",
-            "PF",
+            "GameID", "Season", "Date", "TeamID", "OpponentID", "N", "POFF", "TeamOdds", "OpponentOdds", "W", "Home", "SC",
+            "FGM", "FGA", "FG3M", "FG3A", "FTM", "FTA", "ORB", "DRB", "RB", "AST", "STL", "BLK", "TOV", "PF"
         ]
 
-        self.player_columns = ["PlayerID", "Season", "Date", "TeamID", "GameID", "MIN", "FGM", "FGA", "FG3M", "FG3A", "FTM", "FTA", "ORB", "DRB", "RB", "AST", "STL", "BLK", "TOV", "PF", "PTS"]
-
+        self.player_columns = [
+            "PlayerID", "Season", "Date", "TeamID", "GameID", "MIN", "FGM", "FGA", "FG3M", "FG3A", "FTM", "FTA",
+            "ORB", "DRB", "RB", "AST", "STL", "BLK", "TOV", "PF", "PTS"
+        ]
+        # fmt: on
         self.team_data: Dict[str, pd.DataFrame] = {}
         self.player_data: Dict[str, pd.DataFrame] = {}
 
