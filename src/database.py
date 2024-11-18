@@ -1,3 +1,4 @@
+from collections import defaultdict
 import pandas as pd
 import numpy as np
 from typing import Dict, List, Tuple
@@ -9,12 +10,9 @@ class HistoricalDatabase:
         # fmt: off
         self.team_columns = [
             "GameID", "Season", "Date", "TeamID", "OpponentID", "N", "POFF", "TeamOdds", "OpponentOdds", "W", "Home", "SC",
-            "FGM", "FGA", "FG3M", "FG3A", "FTM", "FTA", "ORB", "DRB", "RB", "AST", "STL", "BLK", "TOV", "PF"
-        ]
-
-        self.player_columns = [
-            "PlayerID", "Season", "Date", "TeamID", "GameID", "MIN", "FGM", "FGA", "FG3M", "FG3A", "FTM", "FTA",
-            "ORB", "DRB", "RB", "AST", "STL", "BLK", "TOV", "PF", "PTS"
+            "FGM", "FGA", "FG3M", "FG3A", "FTM", "FTA", "ORB", "DRB", "RB", "AST", "STL", "BLK", "TOV", "PF",
+            "OpponentSC", "OpponentFGM", "OpponentFGA", "OpponentFG3M", "OpponentFG3A", "OpponentFTM", "OpponentFTA",
+            "OpponentORB", "OpponentDRB", "OpponentRB", "OpponentAST", "OpponentSTL", "OpponentBLK", "OpponentTOV", "OpponentPF"
         ]
         # fmt: on
         self.team_data: Dict[str, List[Dict]] = defaultdict(list)
@@ -94,6 +92,14 @@ class HistoricalDatabase:
                 "W": wins[i],
                 **{stat: stats_arrays[stat][i] for stat in stats_mapping.keys()}
             }
+
+            # Adding opponent stats to the record
+            opponent_stats = {
+                f"Opponent{stat}": stats_arrays[stat][i ^ 1]  # XOR with 1 to get the opponent's value
+                for stat in stats_mapping.keys()
+            }
+
+            record.update(opponent_stats)
             records.append((team_ids[i], record))
 
         return records
