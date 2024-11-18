@@ -34,30 +34,8 @@ class Model:
         # nesázet, pokud je Kelly záporný
         optimal_fraction = max(0, optimal_fraction)
         return float(optimal_fraction)
-
-    def place_bets(self, summary: pd.DataFrame, opps: pd.DataFrame, inc: tuple[pd.DataFrame, pd.DataFrame]):
-        games_inc, players_inc = inc
-        if opps.empty and games_inc.empty and players_inc.empty:
-            return pd.DataFrame(columns=["BetH", "BetA"])
-        min_bet = summary.iloc[0]["Min_bet"]
-        max_bet = summary.iloc[0]["Max_bet"]
-        bankroll = summary.iloc[0]["Bankroll"]
-        todays_date = summary.iloc[0]["Date"]
-        # only iterate over opps with the current date while keeping the original index
-        assert opps[opps["Date"] < todays_date].empty, "There are opps before today's date, which should never happen"
-        todays_opps = opps[opps["Date"] == todays_date]
-        self.yesterdays_games = games_inc
-
-        # upravte si čí funkci vyhodnocování pravděpodobností výhry chcete použít
-        calculate_win_probs_fn = calculate_win_probs_kuba
-        kelly_fraction = 0.2
-        # fraction of budget we are willing to spend today
-        budget_fraction = 0.1
-        use_kelly = False
-        todays_budget = bankroll * budget_fraction
-        non_kelly_bet_amount = min_bet * 2
-
-        # Evaluate yesterday's predictions
+    
+    def evaluate_yestedays_predictions(self, bankroll):
         if self.yesterdays_bets is not None:
             # Calculate accuracy of yesterday's predictions
             correct_predictions = 0
@@ -97,6 +75,94 @@ class Model:
             print(f"Yesterday's bookmaker's accuracy: {bookmaker_accuracy} ({correct_bookmaker_bets}/{total_predictions})")
             print(f"Money - spent: {self.money_spent_yesterday:.2f}$, gained: {bankroll - self.bankroll_after_bets:.2f}$")
             # input("Press Enter to continue...")
+    
+    def calculate_kelly(self, opps, todays_budget, kelly_fraction, min_bet, max_bet):
+        # Sort Kelly criterion in descending order and keep track of original indices
+        # Create a new column with the maximum kelly of home and away
+        opps["MaxKelly"] = opps[["KellyH", "KellyA"]].max(axis=1)
+        sorted_win_probs_opps = opps.sort_values(by="MaxKelly", ascending=False)
+
+        # Place bets based on Kelly criterion starting with the highest one
+        for opp_idx, row in sorted_win_probs_opps.iterrows():
+            # opp_idx = row["index"]
+            kellyH = row["KellyH"]
+            kellyA = row["KellyA"]
+
+            # # New logic: Only bet on the outcome with the higher probability
+            # probH = row["ProbH"]
+            # probA = row["ProbA"]
+            # if probH >= probA:
+            #     kellyA = 0  # Set the Kelly fraction for away team to zero if home is predicted higher
+            # else:
+            #     kellyH = 0  # Set the Kelly fraction for home team to zero if away is predicted higher
+
+            # Skip if both Kelly fractions are zero
+            if kellyH == 0 and kellyA == 0:
+                continue
+
+            bet_home = kellyH * todays_budget * kelly_fraction
+            bet_away = kellyA * todays_budget * kelly_fraction
+
+            # Bet sizes should be between min and max bets and be non-negative
+            betH = max(min(bet_home, max_bet), min_bet) if bet_home >= min_bet else 0
+            betA = max(min(bet_away, max_bet), min_bet) if bet_away >= min_bet else 0
+
+            # Update the bets DataFrame with calculated bet sizes
+            opps.loc[opps.index == opp_idx, "newBetH"] = betH
+            opps.loc[opps.index == opp_idx, "newBetA"] = betA
+            todays_budget -= betH + betA
+
+            # Stop if we run out of budget
+            if todays_budget <= 0:
+                break
+            
+    def bet_on_higher_odds(self, opps, todays_budget, min_bet, max_bet, non_kelly_bet_amount):
+        # Bet on a team we predicted to win
+        for opp_idx, row in opps.iterrows():
+            probH = row["ProbH"]
+            probA = row["ProbA"]
+            if probH == 0 and probA == 0:
+                continue
+
+            betH = non_kelly_bet_amount if probH >= probA else 0
+            betA = non_kelly_bet_amount if probA > probH else 0
+
+            betH = max(min(betH, max_bet), min_bet) if betH >= min_bet else 0
+            betA = max(min(betA, max_bet), min_bet) if betA >= min_bet else 0
+
+            opps.loc[opps.index == opp_idx, "newBetH"] = betH
+            opps.loc[opps.index == opp_idx, "newBetA"] = betA
+            todays_budget -= betH + betA
+
+            if todays_budget <= 0:
+                break
+
+    def place_bets(self, summary: pd.DataFrame, opps: pd.DataFrame, inc: tuple[pd.DataFrame, pd.DataFrame]):
+        games_inc, players_inc = inc
+        bankroll = summary.iloc[0]["Bankroll"]
+        min_bet = summary.iloc[0]["Min_bet"]
+        if opps.empty and games_inc.empty and players_inc.empty or bankroll < min_bet:
+            return pd.DataFrame(columns=["BetH", "BetA"])
+        
+        max_bet = summary.iloc[0]["Max_bet"]
+        todays_date = summary.iloc[0]["Date"]
+        
+        # only iterate over opps with the current date while keeping the original index
+        assert opps[opps["Date"] < todays_date].empty, "There are opps before today's date, which should never happen"
+        todays_opps = opps[opps["Date"] == todays_date]
+        
+        self.yesterdays_games = games_inc
+
+        calculate_win_probs_fn = calculate_win_probs_kuba
+        kelly_fraction = 0.5
+        # fraction of budget we are willing to spend today
+        budget_fraction = 0.2
+        use_kelly = True
+        todays_budget = bankroll * budget_fraction
+        non_kelly_bet_amount = min_bet * 2
+
+        # Evaluate yesterday's predictions
+        self.evaluate_yestedays_predictions(bankroll)
 
         self.db.add_incremental_data(games_inc, players_inc)
 
@@ -144,71 +210,13 @@ class Model:
             opps.loc[opps.index == opp_idx, "KellyA"] = kellyA
 
         if use_kelly:
-            # Sort Kelly criterion in descending order and keep track of original indices
-            # Create a new column with the maximum kelly of home and away
-            opps["MaxKelly"] = opps[["KellyH", "KellyA"]].max(axis=1)
-            sorted_win_probs_opps = opps.sort_values(by="MaxKelly", ascending=False)
-
-            # Place bets based on Kelly criterion starting with the highest one
-            for opp_idx, row in sorted_win_probs_opps.iterrows():
-                # opp_idx = row["index"]
-                kellyH = row["KellyH"]
-                kellyA = row["KellyA"]
-                probH = row["ProbH"]
-                probA = row["ProbA"]
-
-                # # New logic: Only bet on the outcome with the higher probability
-                # if probH >= probA:
-                #     kellyA = 0  # Set the Kelly fraction for away team to zero if home is predicted higher
-                # else:
-                #     kellyH = 0  # Set the Kelly fraction for home team to zero if away is predicted higher
-
-                # Skip if both Kelly fractions are zero
-                if kellyH == 0 and kellyA == 0:
-                    continue
-
-                bet_home = kellyH * todays_budget * kelly_fraction
-                bet_away = kellyA * todays_budget * kelly_fraction
-
-                # Bet sizes should be between min and max bets and be non-negative
-                betH = max(min(bet_home, max_bet), min_bet) if bet_home >= min_bet else 0
-                betA = max(min(bet_away, max_bet), min_bet) if bet_away >= min_bet else 0
-
-                # Update the bets DataFrame with calculated bet sizes
-                opps.loc[opps.index == opp_idx, "newBetH"] = betH
-                opps.loc[opps.index == opp_idx, "newBetA"] = betA
-                todays_budget -= betH + betA
-
-                # Stop if we run out of budget
-                if todays_budget <= 0:
-                    break
+            self.calculate_kelly(opps, todays_budget, kelly_fraction, min_bet, max_bet)
         else:
-            # Bet on a team we predicted to win
-            for opp_idx, row in opps.iterrows():
-                probH = row["ProbH"]
-                probA = row["ProbA"]
-                if probH == 0 and probA == 0:
-                    continue
-
-                betH = non_kelly_bet_amount if probH >= probA else 0
-                betA = non_kelly_bet_amount if probA > probH else 0
-
-                betH = max(min(betH, max_bet), min_bet) if betH >= min_bet else 0
-                betA = max(min(betA, max_bet), min_bet) if betA >= min_bet else 0
-
-                opps.loc[opps.index == opp_idx, "newBetH"] = betH
-                opps.loc[opps.index == opp_idx, "newBetA"] = betA
-                todays_budget -= betH + betA
-
-                if todays_budget <= 0:
-                    break
+            self.bet_on_higher_odds(opps, todays_budget, min_bet, max_bet, non_kelly_bet_amount)
 
         self.money_spent_yesterday = bankroll * budget_fraction - todays_budget
         bets = opps[["newBetH", "newBetA"]]
         bets.rename(columns={"newBetH": "BetH", "newBetA": "BetA"}, inplace=True)
-        # Count and print the number of non-zero bets made today
-        # num_bets = ((bets['BetH'] > 0) | (bets['BetA'] > 0)).sum()
-        # print(f"Made {num_bets} non-zero bets today worth {self.money_spent_yesterday:.2f}$")
         self.yesterdays_bets = opps
         self.bankroll_after_bets = bankroll - self.money_spent_yesterday
         return bets
@@ -218,4 +226,5 @@ class Model:
 conda create -n qqh python=3.12.4 -y
 conda activate qqh
 conda install -c conda-forge -c pytorch -c pyg numpy pandas py-xgboost-cpu scikit-learn scipy statsmodels pytorch==2.4.1 torchvision==0.19.1 torchaudio==2.4.1 cpuonly pyg -y
+pytorch==2.4.1 torchvision==0.19.1 torchaudio==2.4.1 pytorch-cuda=12.1 -c pytorch -c nvidia
 """
