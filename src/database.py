@@ -14,6 +14,10 @@ class HistoricalDatabase:
             "OpponentSC", "OpponentFGM", "OpponentFGA", "OpponentFG3M", "OpponentFG3A", "OpponentFTM", "OpponentFTA",
             "OpponentORB", "OpponentDRB", "OpponentRB", "OpponentAST", "OpponentSTL", "OpponentBLK", "OpponentTOV", "OpponentPF"
         ]
+        self.player_columns = [
+            "PlayerID", "Season", "Date", "TeamID", "GameID", "MIN", "FGM", "FGA", "FG3M", "FG3A", "FTM", "FTA",
+            "ORB", "DRB", "RB", "AST", "STL", "BLK", "TOV", "PF", "PTS"
+        ]
         # fmt: on
         self.team_data: Dict[str, List[Dict]] = defaultdict(list)
         self.player_data: Dict[str, List[Dict]] = defaultdict(list)
