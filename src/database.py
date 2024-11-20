@@ -115,11 +115,11 @@ class HistoricalDatabase:
         for team_id, record in team_records:
             self.team_data[team_id].append(record)
 
-        for _, player_games in players_df.groupby("Player"):
-            player_stats = player_games.rename(columns={"Player": "PlayerID", "Team": "TeamID", "Game": "GameID"})
-            player_stats = player_stats[self.player_columns]
-            for _, row in player_stats.iterrows():
-                self.player_data[row["PlayerID"]].append(row.to_dict())
+        # for _, player_games in players_df.groupby("Player"):
+        #     player_stats = player_games.rename(columns={"Player": "PlayerID", "Team": "TeamID", "Game": "GameID"})
+        #     player_stats = player_stats[self.player_columns]
+        #     for _, row in player_stats.iterrows():
+        #         self.player_data[row["PlayerID"]].append(row.to_dict())
 
     def get_team_data(self, team_id: str) -> pd.DataFrame:
         """Get team data, returning empty DataFrame if team not found."""
