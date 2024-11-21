@@ -2,10 +2,10 @@ import pandas as pd
 
 import sys
 
-sys.path.append(".")
+# sys.path.append(".")
 
-from model import Model as Model  # noqa
-from environment import Environment  # noqa
+from model import Model
+from environment import Environment
 
 games = pd.read_csv("./data/games.csv", index_col=0)
 games["Date"] = pd.to_datetime(games["Date"])
@@ -43,7 +43,8 @@ season_starts = {
 
 env = Environment(
     games, players, Model(), init_bankroll=1000, min_bet=5, max_bet=100,
-    start_date=pd.Timestamp(season_starts.get(4, 1976-11-12))
+    start_date=pd.Timestamp(season_starts.get(4, "1978-11-10")),
+    end_date=pd.Timestamp(season_starts.get(9, "1983-11-11"))
 )
 
 evaluation = env.run()

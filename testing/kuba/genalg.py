@@ -4,7 +4,7 @@ import threading
 from time import time
 import matplotlib.pyplot as plt
 from environment import Environment
-from model import Model, Net
+from model_old import Model, Net
 from random import choices, randint
 from typing import Union
 import numpy as np

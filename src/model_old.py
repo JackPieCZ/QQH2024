@@ -1,89 +1,13 @@
-from collections import defaultdict, deque
-from typing import Dict, List, Tuple
-import numpy as np
+import numpy as np  # noqa
 import pandas as pd
-from torch import tensor, nn
+import torch
 
-
-class Net(nn.Module):
-    def __init__(self):
-        super(Net, self).__init__()
-        self.layer1 = nn.Linear(340, 128)
-        # self.layer2 = nn.Linear(256, 128)
-        self.layer3 = nn.Linear(128, 64)
-        self.layer4 = nn.Linear(64, 32)
-        self.layer5 = nn.Linear(32, 1)
-
-        self.relu = nn.ReLU()
-        self.sigmoid = nn.Sigmoid()
-
-        nn.init.xavier_uniform_(self.layer1.weight)
-        # nn.init.xavier_uniform_(self.layer2.weight)
-        nn.init.xavier_uniform_(self.layer3.weight)
-        nn.init.xavier_uniform_(self.layer4.weight)
-        nn.init.xavier_uniform_(self.layer5.weight)
-
-    def forward(self, x):
-        # Forward pass through the network
-        x = self.relu(self.layer1(x))
-        # x = self.relu(self.layer2(x))
-        x = self.relu(self.layer3(x))
-        x = self.relu(self.layer4(x))
-        x = self.sigmoid(self.layer5(x))
-        return x
-
-
-def calculate_win_probs_kuba2(opp, database, model):
-    """Calculates win probabilities for home and away team.
-
-        Args:
-            summary (pd.Dataframe): Summary of games with columns | Bankroll | Date | Min_bet | Max_bet |.
-            opp (pd.Dataframe): Betting opportunities with columns ['Season', 'Date', 'HID', 'AID', 'N', 'POFF', 'OddsH', 'OddsA', 'BetH', 'BetA'].
-            games_inc (pd.Dataframe): Incremental data for games.
-            players_inc (pd.Dataframe): Incremental data for players.
-            database (HistoricalDatabase): Database storing all past incremental data.
-
-        Returns:
-            tuple(float, float): Probability of home team winning, probability of away team winning.
-        """
-    # Example use of opp
-    home_ID = opp['HID']
-    away_ID = opp['AID']
-    # Example use of database
-    home_data = database.get_team_data(home_ID).tail(5).drop(
-        columns=['GameID', 'Season', 'Date', 'TeamID', 'OpponentID', 'TeamOdds', 'OpponentOdds'], inplace=False)
-    away_data = database.get_team_data(away_ID).tail(5).drop(
-        columns=['GameID', 'Season', 'Date', 'TeamID', 'OpponentID', 'TeamOdds', 'OpponentOdds'], inplace=False)
-    # print(away_team_game_stats)
-    home_win_prob = None
-    away_win_prob = None
-    
-    if len(home_data) == 5 and len(away_data) == 5:
-        home_team_games_stats = home_data[::-1].values.tolist()
-        away_team_game_stats = away_data[::-1].values.tolist()
-        all_data = []
-        for game_data in home_team_games_stats:
-            all_data.extend(game_data)
-        for game_data in away_team_game_stats:
-            all_data.extend(game_data)
-        home_win_prob = model(tensor(all_data).float()).item()
-        away_win_prob = 1 - home_win_prob
-    return home_win_prob, away_win_prob
-
-
-def calculate_arbitrage_betting(odds_a, odds_b):
-    # Step 1: Calculate the implied probabilities for each outcome
-    prob_a = 1 / odds_a
-    prob_b = 1 / odds_b
-
-    # Step 2: Calculate the sum of the implied probabilities
-    total_prob = prob_a + prob_b
-
-    # Step 3: Check if there is an arbitrage opportunity (total probability < 1)
-    if total_prob < 1:
-        return True
-    else:
-        return False
+from arbitrage import calculate_arbitrage_betting
+from database import HistoricalDatabase
+from strats.win_prob_lenka import calculate_win_probs_lenka, calculate_win_probs_lenka2  # noqa
+from strats.win_prob_frantisek import calculate_win_probs_frantisek, calculate_win_probs_frantisek2  # noqa
+from strats.win_prob_sviga import calculate_win_probs_sviga, calculate_win_probs_sviga2  # noqa
+from strats.win_prob_kuba import calculate_win_probs_kuba, calculate_win_probs_kuba2, Net  # noqa
 
 
 class Model:
@@ -94,11 +18,12 @@ class Model:
         self.money_spent_yesterday = 0
         self.bankroll_after_bets = 0
         self.model = model
-        self.last_bankrolls = deque(maxlen=30)
         if model is None:
-            raise NotImplementedError
-            # self.model = Net()
-            # self.model.load_state_dict()
+            self.model = Net(320)
+            self.model.load_state_dict(torch.load(
+                r"D:\_FEL\QQH2024\testing\kuba\best_model_epoch.pth"))
+            self.model.eval()
+            print("Model loaded")
 
     def kelly_criterion(self, probability, odds):
         """
@@ -135,6 +60,8 @@ class Model:
                 # game_df = pd.DataFrame(game).T
 
                 # Determine which team was predicted to win
+                if prediction["ProbH"] == 0 and prediction["ProbA"] == 0:
+                    continue
                 assert prediction["ProbH"] + prediction["ProbA"] != 0, "Probabilities should not sum up to zero"
                 predicted_home_win = prediction["ProbH"] > prediction["ProbA"]
 
@@ -224,13 +151,7 @@ class Model:
         games_inc, players_inc = inc
         bankroll = summary.iloc[0]["Bankroll"]
         min_bet = summary.iloc[0]["Min_bet"]
-        # Check if bankroll has stayed constant for last 30 calls
-        # Round to 2 decimal places to avoid float comparison issues
-        self.last_bankrolls.append(int(bankroll))
-        # Compare first value to all others for efficiency
-        bankroll_stuck = len(self.last_bankrolls) == 30 and all(x == self.last_bankrolls[0] for x in self.last_bankrolls)
-            
-        if (opps.empty and games_inc.empty and players_inc.empty) or (bankroll < min_bet) or bankroll_stuck:
+        if opps.empty and games_inc.empty and players_inc.empty or bankroll < min_bet:
             return pd.DataFrame(columns=["BetH", "BetA"])
 
         max_bet = summary.iloc[0]["Max_bet"]
@@ -243,7 +164,7 @@ class Model:
         self.yesterdays_games = games_inc
 
         calculate_win_probs_fn = calculate_win_probs_kuba2
-        kelly_fraction = 0.25
+        kelly_fraction = 0.5
         # fraction of budget we are willing to spend today
         budget_fraction = 0.1
         use_kelly = False
@@ -251,9 +172,9 @@ class Model:
         non_kelly_bet_amount = min_bet * 2
 
         # Evaluate yesterday's predictions
-        # self.evaluate_yestedays_predictions(bankroll)
+        self.evaluate_yestedays_predictions(bankroll)
 
-        self.db.add_incremental_data(games_inc)
+        self.db.add_incremental_data(games_inc, players_inc)
 
         # Temporarily disable SettingWithCopyWarning
         pd.options.mode.chained_assignment = None
@@ -312,121 +233,6 @@ class Model:
         self.yesterdays_bets = opps
         self.bankroll_after_bets = bankroll - self.money_spent_yesterday
         return bets
-
-
-class HistoricalDatabase:
-    def __init__(self):
-        # fmt: off
-        self.team_columns = [
-            "GameID", "Season", "Date", "TeamID", "OpponentID", "N", "POFF", "TeamOdds", "OpponentOdds", "W", "Home", "SC",
-            "FGM", "FGA", "FG3M", "FG3A", "FTM", "FTA", "ORB", "DRB", "RB", "AST", "STL", "BLK", "TOV", "PF",
-            "OpponentSC", "OpponentFGM", "OpponentFGA", "OpponentFG3M", "OpponentFG3A", "OpponentFTM", "OpponentFTA",
-            "OpponentORB", "OpponentDRB", "OpponentRB", "OpponentAST", "OpponentSTL", "OpponentBLK", "OpponentTOV", "OpponentPF"
-        ]
-        self.player_columns = [
-            "PlayerID", "Season", "Date", "TeamID", "GameID", "MIN", "FGM", "FGA", "FG3M", "FG3A", "FTM", "FTA",
-            "ORB", "DRB", "RB", "AST", "STL", "BLK", "TOV", "PF", "PTS"
-        ]
-        # fmt: on
-        self.team_data: Dict[str, List[Dict]] = defaultdict(list)
-        self.player_data: Dict[str, List[Dict]] = defaultdict(list)
-
-    def _create_team_records(self, games_df: pd.DataFrame) -> List[Tuple[str, Dict]]:
-        """Create team records maintaining the original game order."""
-        records = []
-
-        n_games = len(games_df) * 2
-        game_ids = np.repeat(games_df.index.values, 2)
-        seasons = np.repeat(games_df["Season"].values, 2)
-        dates = np.repeat(games_df["Date"].values, 2)
-        n_values = np.repeat(games_df["N"].values, 2)
-        poff_values = np.repeat(games_df["POFF"].values, 2)
-
-        team_ids = np.empty(n_games, dtype=object)
-        team_ids[0::2] = games_df["HID"].values
-        team_ids[1::2] = games_df["AID"].values
-
-        opponent_ids = np.empty(n_games, dtype=object)
-        opponent_ids[0::2] = games_df["AID"].values
-        opponent_ids[1::2] = games_df["HID"].values
-
-        home_flags = np.empty(n_games, dtype=int)
-        home_flags[0::2] = 1
-        home_flags[1::2] = 0
-
-        wins = np.empty(n_games, dtype=int)
-        wins[0::2] = games_df["H"].values
-        wins[1::2] = games_df["A"].values
-
-        team_odds = np.empty(n_games)
-        opponent_odds = np.empty(n_games)
-        team_odds[0::2] = games_df["OddsH"].values
-        team_odds[1::2] = games_df["OddsA"].values
-        opponent_odds[0::2] = games_df["OddsA"].values
-        opponent_odds[1::2] = games_df["OddsH"].values
-
-        stats_mapping = {
-            "SC": ("HSC", "ASC"),
-            "FGM": ("HFGM", "AFGM"),
-            "FGA": ("HFGA", "AFGA"),
-            "FG3M": ("HFG3M", "AFG3M"),
-            "FG3A": ("HFG3A", "AFG3A"),
-            "FTM": ("HFTM", "AFTM"),
-            "FTA": ("HFTA", "AFTA"),
-            "ORB": ("HORB", "AORB"),
-            "DRB": ("HDRB", "ADRB"),
-            "RB": ("HRB", "ARB"),
-            "AST": ("HAST", "AAST"),
-            "STL": ("HSTL", "ASTL"),
-            "BLK": ("HBLK", "ABLK"),
-            "TOV": ("HTOV", "ATOV"),
-            "PF": ("HPF", "APF"),
-        }
-
-        stats_arrays = {}
-        for stat, (h_col, a_col) in stats_mapping.items():
-            stat_values = np.empty(n_games)
-            stat_values[0::2] = games_df[h_col].values
-            stat_values[1::2] = games_df[a_col].values
-            stats_arrays[stat] = stat_values
-
-        for i in range(n_games):
-            record = {
-                "GameID": game_ids[i],
-                "Season": seasons[i],
-                "Date": dates[i],
-                "TeamID": team_ids[i],
-                "OpponentID": opponent_ids[i],
-                "N": n_values[i],
-                "POFF": poff_values[i],
-                "TeamOdds": team_odds[i],
-                "OpponentOdds": opponent_odds[i],
-                "Home": home_flags[i],
-                "W": wins[i],
-                **{stat: stats_arrays[stat][i] for stat in stats_mapping.keys()}
-            }
-
-            # Adding opponent stats to the record
-            opponent_stats = {
-                f"Opponent{stat}": stats_arrays[stat][i ^ 1]  # XOR with 1 to get the opponent's value
-                for stat in stats_mapping.keys()
-            }
-
-            record.update(opponent_stats)
-            records.append((team_ids[i], record))
-
-        return records
-
-    def add_incremental_data(self, games_df: pd.DataFrame) -> None:
-        """Add new game and player data efficiently while maintaining game order."""
-        team_records = self._create_team_records(games_df)
-
-        for team_id, record in team_records:
-            self.team_data[team_id].append(record)
-
-    def get_team_data(self, team_id: str) -> pd.DataFrame:
-        """Get team data, returning empty DataFrame if team not found."""
-        return pd.DataFrame(self.team_data.get(team_id, []), columns=self.team_columns)
 
 
 """

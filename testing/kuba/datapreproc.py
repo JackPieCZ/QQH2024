@@ -1,49 +1,91 @@
-from collections import defaultdict, deque
-from typing import Dict, List, Tuple
-import numpy as np
-import pandas as pd
 from torch import tensor, nn
-import torch
+import numpy as np
+from typing import Dict, List, Tuple
+from collections import defaultdict, deque
+import pandas as pd
+import sys
+sys.path.append("D:/_FEL/QQH2024/testing")
+from environment import Environment  # noqa
 
 
-class ResidualBlock(nn.Module):
-    def __init__(self, input_size, output_size, dropout=0.4):
-        super(ResidualBlock, self).__init__()
-        self.fc = nn.Sequential(
-            nn.Linear(input_size, output_size),
-            nn.LeakyReLU(negative_slope=0.01),  # Replace ReLU with LeakyReLU
-            nn.BatchNorm1d(output_size),
-            nn.Dropout(dropout)
+class Evaluator:
+    def __init__(self) -> None:
+        self.games = pd.read_csv(
+            r"D:\_FEL\QQH2024\testing\data\games.csv", index_col=0)
+        self.games["Date"] = pd.to_datetime(self.games["Date"])
+        self.games["Open"] = pd.to_datetime(self.games["Open"])
+
+        self.players = pd.read_csv(
+            r"D:\_FEL\QQH2024\testing\data\players.csv", index_col=0)
+        self.players["Date"] = pd.to_datetime(self.players["Date"])
+
+        self.season_starts = {
+            1: "1975-11-07",
+            2: "1976-11-12",
+            3: "1977-11-11",
+            4: "1978-11-10",
+            5: "1979-11-09",
+            6: "1980-11-07",
+            7: "1981-11-13",
+            8: "1982-11-12",
+            9: "1983-11-11",
+            10: "1984-11-09",
+            11: "1985-11-08",
+            12: "1986-11-07",
+            13: "1988-02-12",
+            14: "1988-11-08",
+            15: "1989-11-07",
+            16: "1990-11-06",
+            17: "1991-11-05",
+            18: "1992-11-03",
+            19: "1993-11-09",
+            20: "1994-11-08",
+            21: "1995-11-07",
+            22: "1996-11-05",
+            23: "1997-11-04",
+            24: "1998-11-03",
+        }
+
+    def evaluate(self, start_season=4, num_seasons=5):
+        env = Environment(
+            self.games, self.players, Model(), init_bankroll=1000, min_bet=5, max_bet=100,
+            # start_date=pd.Timestamp(self.season_starts.get(start_season, "1976-11-12")),
+            # end_date=pd.Timestamp(self.season_starts.get(start_season + num_seasons, "1983-11-11"))
         )
-        # Shortcut for residual connection
-        self.shortcut = nn.Linear(input_size, output_size)
 
-    def forward(self, x):
-        return self.fc(x) + self.shortcut(x)
+        evaluation = env.run()
+        # print(f"Final bankroll: {env.bankroll:.2f}")
+        return env.bankroll, env.get_history()
 
 
 class Net(nn.Module):
-    def __init__(self, input_size):
+    def __init__(self):
         super(Net, self).__init__()
-        self.block1 = ResidualBlock(input_size, 512, dropout=0.4)
-        self.block2 = ResidualBlock(512, 256, dropout=0.4)
-        self.block3 = ResidualBlock(256, 128, dropout=0.3)
-        self.block4 = ResidualBlock(128, 64, dropout=0.3)  # New block
-        self.fc = nn.Sequential(
-            nn.Linear(64, 32),
-            nn.SiLU(),  # Swish activation
-            nn.BatchNorm1d(32),
-            nn.Linear(32, 1),
-            nn.Sigmoid()
-        )
+        self.layer1 = nn.Linear(340, 128)
+        # self.layer2 = nn.Linear(256, 128)
+        self.layer3 = nn.Linear(128, 64)
+        self.layer4 = nn.Linear(64, 32)
+        self.layer5 = nn.Linear(32, 1)
+
+        self.relu = nn.ReLU()
+        self.sigmoid = nn.Sigmoid()
+
+        nn.init.xavier_uniform_(self.layer1.weight)
+        # nn.init.xavier_uniform_(self.layer2.weight)
+        nn.init.xavier_uniform_(self.layer3.weight)
+        nn.init.xavier_uniform_(self.layer4.weight)
+        nn.init.xavier_uniform_(self.layer5.weight)
 
     def forward(self, x):
-        x = x.view(1, -1)
-        x = self.block1(x)
-        x = self.block2(x)
-        x = self.block3(x)
-        x = self.block4(x)
-        return self.fc(x)
+        # Forward pass through the network
+        x = self.relu(self.layer1(x))
+        # x = self.relu(self.layer2(x))
+        x = self.relu(self.layer3(x))
+        x = self.relu(self.layer4(x))
+        x = self.sigmoid(self.layer5(x))
+        return x
+
+# Calculate additional features
 
 
 def calculate_features(home_data, away_data):
@@ -214,8 +256,7 @@ def calculate_features(home_data, away_data):
         rolling_average_sc_home, rolling_average_sc_away, rolling_std_sc_home, rolling_std_sc_away,
         rolling_average_fg_percent_home, rolling_average_fg_percent_away, rolling_std_fg_percent_home, rolling_std_fg_percent_away,
         rolling_average_fg3_percent_home, rolling_average_fg3_percent_away, rolling_std_fg3_percent_home, rolling_std_fg3_percent_away,
-        # , rolling_std_rb_home, rolling_std_rb_away
-        rolling_average_rb_home, rolling_average_rb_away
+        rolling_average_rb_home, rolling_average_rb_away, #rolling_std_rb_home, rolling_std_rb_away
     ])
 
     return new_features
@@ -234,49 +275,23 @@ def calculate_win_probs_kuba2(opp, database, model):
         Returns:
             tuple(float, float): Probability of home team winning, probability of away team winning.
         """
-    max_sc, max_fgm, max_fga, max_fg3m, max_fg3a, max_ftm, max_fta, max_orb, max_drb, max_rb, max_ast, max_stl, max_blk, max_tov, max_pf = 173, 67, 130, 23, 49, 61, 80, 37, 54, 76, 52, 27, 23, 40, 52
+    # Example use of opp
     home_ID = opp['HID']
     away_ID = opp['AID']
     # Example use of database
     home_data = database.get_team_data(home_ID).tail(5)
+    # home_data["Home"] = 1
+    # .drop(columns=['GameID', 'Season', 'Date', 'TeamID', 'OpponentID', 'TeamOdds', 'OpponentOdds'], inplace=False)
     away_data = database.get_team_data(away_ID).tail(5)
+    # away_data["Home"] = 0
+    # .drop(columns=['GameID', 'Season', 'Date', 'TeamID', 'OpponentID', 'TeamOdds', 'OpponentOdds'], inplace=False)
+    # print(away_team_game_stats)
     home_win_prob = None
     away_win_prob = None
 
     if len(home_data) == 5 and len(away_data) == 5:
         columns_to_drop = ['GameID', 'Season', 'Date', 'TeamID',
                            'OpponentID', 'TeamOdds', 'OpponentOdds', 'N', 'POFF']
-        for data_df in [home_data, away_data]:
-            data_df['SC'] /= max_sc
-            data_df['OpponentSC'] /= max_sc
-            data_df['FGM'] /= max_fgm
-            data_df['OpponentFGM'] /= max_fgm
-            data_df['FGA'] /= max_fga
-            data_df['OpponentFGA'] /= max_fga
-            data_df['FG3M'] /= max_fg3m
-            data_df['OpponentFG3M'] /= max_fg3m
-            data_df['FG3A'] /= max_fg3a
-            data_df['OpponentFG3A'] /= max_fg3a
-            data_df['FTM'] /= max_ftm
-            data_df['OpponentFTM'] /= max_ftm
-            data_df['FTA'] /= max_fta
-            data_df['OpponentFTA'] /= max_fta
-            data_df['ORB'] /= max_orb
-            data_df['OpponentORB'] /= max_orb
-            data_df['DRB'] /= max_drb
-            data_df['OpponentDRB'] /= max_drb
-            data_df['RB'] /= max_rb
-            data_df['OpponentRB'] /= max_rb
-            data_df['AST'] /= max_ast
-            data_df['OpponentAST'] /= max_ast
-            data_df['STL'] /= max_stl
-            data_df['OpponentSTL'] /= max_stl
-            data_df['BLK'] /= max_blk
-            data_df['OpponentBLK'] /= max_blk
-            data_df['TOV'] /= max_tov
-            data_df['OpponentTOV'] /= max_tov
-            data_df['PF'] /= max_pf
-            data_df['OpponentPF'] /= max_pf
         home_team_games_stats = home_data[::-1].drop(
             columns=columns_to_drop, inplace=False).values.tolist()
         away_team_game_stats = away_data[::-1].drop(
@@ -289,8 +304,11 @@ def calculate_win_probs_kuba2(opp, database, model):
             all_data.extend(game_data)
 
         all_data.extend(calculate_features(home_data, away_data))
-        home_win_prob = model(tensor(all_data).float()).item()
-        away_win_prob = 1 - home_win_prob
+
+        all_data_df.at[opp.name, 'InputVec'] = all_data
+        print(len(all_data))
+        # home_win_prob = model(tensor(all_data).float()).item()
+        # away_win_prob = 1 - home_win_prob
     return home_win_prob, away_win_prob
 
 
@@ -318,10 +336,6 @@ class Model:
         self.bankroll_after_bets = 0
         self.model = model
         self.last_bankrolls = deque(maxlen=30)
-        if model is None:
-            self.model = Net(393)
-            self.model.load_state_dict(torch.load("D:/_FEL/QQH2024/testing/kuba/best_model_epoch.pth"))
-            self.model.eval()
 
     def kelly_criterion(self, probability, odds):
         """
@@ -462,11 +476,11 @@ class Model:
         # Round to 2 decimal places to avoid float comparison issues
         self.last_bankrolls.append(int(bankroll))
         # Compare first value to all others for efficiency
-        bankroll_stuck = len(self.last_bankrolls) == 30 and all(
-            x == self.last_bankrolls[0] for x in self.last_bankrolls)
+        # bankroll_stuck = len(self.last_bankrolls) == 30 and all(
+        #     x == self.last_bankrolls[0] for x in self.last_bankrolls)
 
-        if (opps.empty and games_inc.empty and players_inc.empty) or (bankroll < min_bet) or bankroll_stuck:
-            return pd.DataFrame(columns=["BetH", "BetA"])
+        # if (opps.empty and games_inc.empty and players_inc.empty) or (bankroll < min_bet) or bankroll_stuck:
+        #     return pd.DataFrame(columns=["BetH", "BetA"])
 
         max_bet = summary.iloc[0]["Max_bet"]
         todays_date = summary.iloc[0]["Date"]
@@ -484,7 +498,7 @@ class Model:
         budget_fraction = 0.1
         use_kelly = False
         todays_budget = bankroll * budget_fraction
-        non_kelly_bet_amount = min_bet
+        non_kelly_bet_amount = min_bet * 2
 
         # Evaluate yesterday's predictions
         # self.evaluate_yestedays_predictions(bankroll)
@@ -673,9 +687,72 @@ class HistoricalDatabase:
         return pd.DataFrame(self.team_data.get(team_id, []), columns=self.team_columns)
 
 
-"""
-conda create -n qqh python=3.12.4 -y
-conda activate qqh
-conda install -c conda-forge -c pytorch -c pyg numpy pandas py-xgboost-cpu scikit-learn scipy statsmodels pytorch==2.4.1 torchvision==0.19.1 torchaudio==2.4.1 cpuonly pyg -y
-pytorch==2.4.1 torchvision==0.19.1 torchaudio==2.4.1 pytorch-cuda=12.1 -c pytorch -c nvidia
-"""
+if __name__ == "__main__":
+    evaluator = Evaluator()
+    all_data_df = evaluator.games[[
+        "Season", "Date", "HID", "AID", "N", "POFF", "H"]].copy()
+    all_data_df["InputVec"] = 0
+    all_data_df["InputVec"] = all_data_df["InputVec"].astype('object')
+    max_sc = max(evaluator.games["HSC"].max(), evaluator.games["ASC"].max())
+    max_fgm = max(evaluator.games["HFGM"].max(), evaluator.games["AFGM"].max())
+    max_fga = max(evaluator.games["HFGA"].max(), evaluator.games["AFGA"].max())
+    max_fg3m = max(evaluator.games["HFG3M"].max(),
+                   evaluator.games["AFG3M"].max())
+    max_fg3a = max(evaluator.games["HFG3A"].max(),
+                   evaluator.games["AFG3A"].max())
+    max_ftm = max(evaluator.games["HFTM"].max(), evaluator.games["AFTM"].max())
+    max_fta = max(evaluator.games["HFTA"].max(), evaluator.games["AFTA"].max())
+    max_orb = max(evaluator.games["HORB"].max(), evaluator.games["AORB"].max())
+    max_drb = max(evaluator.games["HDRB"].max(), evaluator.games["ADRB"].max())
+    max_rb = max(evaluator.games["HRB"].max(), evaluator.games["ARB"].max())
+    max_ast = max(evaluator.games["HAST"].max(), evaluator.games["AAST"].max())
+    max_stl = max(evaluator.games["HSTL"].max(), evaluator.games["ASTL"].max())
+    max_blk = max(evaluator.games["HBLK"].max(), evaluator.games["ABLK"].max())
+    max_tov = max(evaluator.games["HTOV"].max(), evaluator.games["ATOV"].max())
+    max_pf = max(evaluator.games["HPF"].max(), evaluator.games["APF"].max())
+    print(max_sc, max_fgm, max_fga, max_fg3m, max_fg3a, max_ftm, max_fta,
+          max_orb, max_drb, max_rb, max_ast, max_stl, max_blk, max_tov, max_pf)
+    for column in evaluator.games.columns:
+        if column not in ['InputVec', 'Date', 'Season', 'HID', 'AID', 'Open', 'OddsH', 'OddsA']:
+            if 'SC' in column:
+                evaluator.games[column] = evaluator.games[column] / max_sc
+            elif 'FGM' in column:
+                evaluator.games[column] = evaluator.games[column] / max_fgm
+            elif 'FGA' in column:
+                evaluator.games[column] = evaluator.games[column] / max_fga
+            elif 'FG3M' in column:
+                evaluator.games[column] = evaluator.games[column] / max_fg3m
+            elif 'FG3A' in column:
+                evaluator.games[column] = evaluator.games[column] / max_fg3a
+            elif 'FTM' in column:
+                evaluator.games[column] = evaluator.games[column] / max_ftm
+            elif 'FTA' in column:
+                evaluator.games[column] = evaluator.games[column] / max_fta
+            elif 'ORB' in column:
+                evaluator.games[column] = evaluator.games[column] / max_orb
+            elif 'DRB' in column:
+                evaluator.games[column] = evaluator.games[column] / max_drb
+            elif 'RB' in column:
+                evaluator.games[column] = evaluator.games[column] / max_rb
+            elif 'AST' in column:
+                evaluator.games[column] = evaluator.games[column] / max_ast
+            elif 'STL' in column:
+                evaluator.games[column] = evaluator.games[column] / max_stl
+            elif 'BLK' in column:
+                evaluator.games[column] = evaluator.games[column] / max_blk
+            elif 'TOV' in column:
+                evaluator.games[column] = evaluator.games[column] / max_tov
+            elif 'PF' in column:
+                evaluator.games[column] = evaluator.games[column] / max_pf
+            elif column in ['N', 'POFF', 'H', 'A']:
+                evaluator.games[column] = evaluator.games[column]
+            else:
+                raise ValueError(f"Unknown column: {column}")
+    print(all_data_df.head())
+    bankroll, history = evaluator.evaluate()
+    print(f"Final bankroll: {bankroll:.2f}")
+    # print(history)
+    # Save all_data_df to CSV file
+    output_path = "./all_games_data.csv"
+    all_data_df.to_csv(output_path, index=True)
+    print(f"Saved game data to {output_path}")
