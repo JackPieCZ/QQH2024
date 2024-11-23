@@ -129,34 +129,34 @@ plt.tight_layout()
 plt.show()
 
 
-# # Logistic Regression Model
-# logreg = LinearRegression()
-# logreg.fit(X_train, y_train)
+# Logistic Regression Model
+logreg = LogisticRegression()
+logreg.fit(X_train, y_train)
 
-# # Predict probabilities for the test set
-# # y_pred_proba = logreg.predict(X_test)[:, 1]
+# Predict probabilities for the test set
+# y_pred_proba = logreg.predict(X_test)[:, 1]
 
-# # Evaluate model performance
-# accuracy = accuracy_score(y_test, logreg.predict(X_test))
-# # roc_auc = roc_auc_score(y_test, y_pred_proba)
-# print(f'Accuracy: {accuracy:.2f}')
-# # print(f'ROC AUC: {roc_auc:.2f}')
+# Evaluate model performance
+accuracy = accuracy_score(y_test, logreg.predict(X_test))
+# roc_auc = roc_auc_score(y_test, y_pred_proba)
+print(f'Accuracy: {accuracy:.2f}')
+# print(f'ROC AUC: {roc_auc:.2f}')
 
-# # Feature Importance using Permutation Importance
-# perm_importance = permutation_importance(logreg, X_test, y_test, n_repeats=10, random_state=42)
-# feature_importances = pd.Series(perm_importance.importances_mean, index=features)
+# Feature Importance using Permutation Importance
+perm_importance = permutation_importance(logreg, X_test, y_test, n_repeats=10, random_state=42)
+feature_importances = pd.Series(perm_importance.importances_mean, index=features)
 
-# # Plotting Feature Importances
-# feature_importances.sort_values(ascending=False).plot(kind='bar', figsize=(15, 7))
-# plt.title("Feature Importance based on Permutation Importance")
-# plt.xlabel("Features")
-# plt.ylabel("Importance")
-# plt.show()
+# Plotting Feature Importances
+feature_importances.sort_values(ascending=False).plot(kind='bar', figsize=(15, 7))
+plt.title("Feature Importance based on Permutation Importance")
+plt.xlabel("Features")
+plt.ylabel("Importance")
+plt.show()
 
-# # Calculate probabilities of Home and Away win for use with Kelly's criterion
-# # Adding predictions back to the original dataset for betting purposes
-# games['home_win_prob'] = logreg.predict_proba(X)[:, 1]
-# games['away_win_prob'] = 1 - games['home_win_prob']
+# Calculate probabilities of Home and Away win for use with Kelly's criterion
+# Adding predictions back to the original dataset for betting purposes
+games['home_win_prob'] = logreg.predict_proba(X)[:, 1]
+games['away_win_prob'] = 1 - games['home_win_prob']
 
-# # Display a few rows to understand the results
-# print(games[['Season', 'Date', 'HID', 'AID', 'home_win_prob', 'away_win_prob']].head())
+# Display a few rows to understand the results
+print(games[['Season', 'Date', 'HID', 'AID', 'home_win_prob', 'away_win_prob']].head())
