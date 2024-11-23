@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 import pandas as pd
 
 
@@ -6,26 +7,33 @@ data = pd.read_csv('./data/season_1_matches.csv')
 # Create a DataFrame
 df = pd.DataFrame(data)
 
+
 # Map 'W' to colors: 1 -> Green (Win), 0 -> Red (Loss)
 colors = df['W'].map({1: 'green', 0: 'red'})
 
-# Plot the data
-plt.figure(figsize=(8, 6))
-plt.scatter(df['SC'], df['ACC'], c=colors, s=50, edgecolor='black', alpha=0.8)
+# Map Home/Away ('H'/'A') to Z-axis values: H -> 1, A -> 0
+df['Z'] = df['Team'].map({'H': 1, 'A': 0})
 
-# Add labels and title
-plt.xlabel('Score', fontsize=12)
-plt.ylabel('Accuracy', fontsize=12)
-plt.title('2D Visualization of Team Performance', fontsize=14)
+# Create a 3D plot
+fig = plt.figure(figsize=(10, 8))
+ax = fig.add_subplot(111, projection='3d')
+
+# Plot the data points in 3D
+ax.scatter(df['SC'], df['ACC'], df['Z'], c=colors, s=100, edgecolor='black', alpha=0.8)
+
+# Set axis labels
+ax.set_xlabel('Score (SC)', fontsize=12)
+ax.set_ylabel('Win Probability (WP)', fontsize=12)
+ax.set_zlabel('Home/Away (H/A)', fontsize=12)
+ax.set_title('3D Visualization of Team Performance (Home/Away)', fontsize=14)
 
 # Add a legend
 legend_elements = [
     plt.Line2D([0], [0], marker='o', color='w', label='Win', markerfacecolor='green', markersize=10),
     plt.Line2D([0], [0], marker='o', color='w', label='Loss', markerfacecolor='red', markersize=10)
 ]
-plt.legend(handles=legend_elements, loc='upper left')
+ax.legend(handles=legend_elements, loc='upper left')
 
 # Show the plot
-plt.grid(True)
 plt.tight_layout()
 plt.show()
