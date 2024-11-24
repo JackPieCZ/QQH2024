@@ -28,7 +28,7 @@ season_matches['AA'] = season_matches.apply(calculate_away_acc_per, axis=1)
 season_matches.drop(
     ['Season', 'Date','Open', 'HID', 'AID', 'N', 'POFF', 'OddsH', 'OddsA', 'HFG3M', 'AFG3M', 
      'HFG3A', 'AFG3A', 'HFTM', 'AFTM', 'HFTA', 'AFTA', 'HORB', 'AORB', 'HDRB', 'ADRB', 
-     'HRB', 'ARB', 'HAST', 'AAST', 'HSTL', 'ASTL', 'HBLK', 'ABLK', 'HTOV', 'ATOV', 
+      'HAST', 'AAST', 'HSTL', 'ASTL', 'HBLK', 'ABLK', 'HTOV', 'ATOV', 
      'HPF', 'APF','HFGM','HFGA','AFGM','AFGA'], 
     inplace=True, 
     axis=1, 
@@ -36,13 +36,13 @@ season_matches.drop(
 )
 
 
-home_df = season_matches[['H', 'HSC', 'HA']].rename(columns={'H': 'Team', 'HSC': 'SC', 'HA': 'ACC'})
+home_df = season_matches[['H', 'HSC', 'HA','HRB']].rename(columns={'H': 'Team', 'HSC': 'SC', 'HA': 'ACC','HRB': 'RB'})
 home_df['Team'] = 'H'  # Mark as home team
 home_df['W'] = [1 if row['HSC'] > row['ASC'] else 0 if row['HSC'] < row['ASC'] else 'Draw'
                      for _, row in season_matches.iterrows()]
 
 # Add win/loss information for away team
-away_df = season_matches[['A', 'ASC', 'AA']].rename(columns={'A': 'Team', 'ASC': 'SC', 'AA': 'ACC'})
+away_df = season_matches[['A', 'ASC', 'AA','ARB']].rename(columns={'A': 'Team', 'ASC': 'SC', 'AA': 'ACC','ARB': 'RB'})
 away_df['Team'] = 'A'  # Mark as away team
 away_df['W'] = [1 if row['ASC'] > row['HSC'] else 0 if row['ASC'] < row['HSC'] else 'Draw'
                      for _, row in season_matches.iterrows()]

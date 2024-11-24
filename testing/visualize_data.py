@@ -19,12 +19,12 @@ fig = plt.figure(figsize=(10, 8))
 ax = fig.add_subplot(111, projection='3d')
 
 # Plot the data points in 3D
-ax.scatter(df['SC'], df['ACC'], df['Z'], c=colors, s=100, edgecolor='black', alpha=0.8)
+ax.scatter(df['SC'], df['ACC'], df['RB'], c=colors, s=25, edgecolor='black', alpha=0.7)
 
 # Set axis labels
-ax.set_xlabel('Score (SC)', fontsize=12)
-ax.set_ylabel('Win Probability (WP)', fontsize=12)
-ax.set_zlabel('Home/Away (H/A)', fontsize=12)
+ax.set_xlabel('Score', fontsize=12)
+ax.set_ylabel('Accuracy', fontsize=12)
+ax.set_zlabel('Number of rebounds', fontsize=12)
 ax.set_title('3D Visualization of Team Performance (Home/Away)', fontsize=14)
 
 # Add a legend
